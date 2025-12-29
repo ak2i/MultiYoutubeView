@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Multi YouTube Live Viewer (Main + Thumbs)</title>
+  <title>Multi YouTube Live Viewer (Thumbs Only)</title>
   <style>
     :root{
       --gap: 10px;
@@ -32,17 +32,6 @@
     .hint{ font-size:12px; color:var(--muted); margin-top:6px; line-height:1.5; }
 
     main{ padding:10px; }
-    .layout{
-      display:grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      grid-template-rows: auto;
-      gap: var(--gap);
-      align-items: start;
-    }
-    /* iPhone縦だとメインを上、サムネを下 */
-    @media (max-width: 900px){
-      .layout{ grid-template-columns: 1fr; }
-    }
 
     .panel{
       background:var(--panel);
@@ -50,7 +39,6 @@
       border-radius:12px;
       overflow:hidden;
     }
-
     .panelHead{
       padding:8px 10px;
       display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -61,14 +49,6 @@
       text-overflow:ellipsis; white-space:nowrap; max-width: 70%;
     }
     .actions{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
-
-    .player{
-      position:relative;
-      width:100%;
-      aspect-ratio:16/9;
-      background:#000;
-    }
-    iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
 
     .thumbs{
       display:grid;
@@ -81,11 +61,9 @@
       border-radius:12px;
       overflow:hidden;
       background:#070707;
-      cursor:pointer;
       transition: transform .05s ease-in-out;
     }
     .thumb:active{ transform: scale(0.99); }
-    .thumb.selected{ outline: 2px solid #6aa6ff; }
 
     .thumbHead{
       padding:8px 10px;
@@ -98,12 +76,14 @@
       max-width: 70%;
     }
     .thumbActions{ display:flex; gap:6px; }
+
     .miniPlayer{
       position:relative;
       width:100%;
       aspect-ratio:16/9;
       background:#000;
     }
+    iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
 
     .danger{ border-color:#5a2a2a; }
   </style>
@@ -124,48 +104,36 @@
         <option value="360">360</option>
       </select>
     </label>
+
     <button id="exportJson">JSONエクスポート</button>
 
-      <label style="display:flex;align-items:center;gap:6px;">
-        JSONインポート
-        <input id="importJson" type="file" accept="application/json" style="display:none;">
-      </label>
-    </div>
+    <label style="display:flex;align-items:center;gap:6px;">
+      JSONインポート
+      <input id="importJson" type="file" accept="application/json" style="display:none;">
+    </label>
+  </div>
+
   <div class="hint">
-    タップでメイン切替。iPhoneは同時再生/自動再生が制限されることがあります。まずは「メインだけミュート解除」が安定です。
+    サムネ（動画タイル）だけを一覧表示します。iOS対策で埋め込みは常にミュート固定です（音はYouTubeで開いて視聴推奨）。
   </div>
 </header>
 
 <main>
-  <div class="layout">
-    <!-- Main -->
-    <section class="panel" id="mainPanel">
-      <div class="panelHead">
-        <div class="title" id="mainTitle">メイン</div>
-        <div class="actions">
-          <button id="mainUnmute">メインだけミュート解除</button>
-          <button id="allMute">全部ミュート</button>
-          <button id="openMain">YouTubeで開く</button>
-        </div>
+  <section class="panel">
+    <div class="panelHead">
+      <div class="title">サムネ一覧</div>
+      <div class="actions">
+        <button id="reloadEmbeds">再読み込み</button>
+        <button id="allMute">（記録上）全部ミュート</button>
       </div>
-      <div class="player" id="mainPlayer"></div>
-    </section>
-
-    <!-- Thumbs -->
-    <section class="panel">
-      <div class="panelHead">
-        <div class="title">サムネ一覧（タップでメインへ）</div>
-        <div class="actions">
-          <button id="reloadEmbeds">再読み込み</button>
-        </div>
-      </div>
-      <div class="thumbs" id="thumbs"></div>
-    </section>
-  </div>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+  </section>
 </main>
 
 <script>
-  const LS_KEY = "yt_multi_live_items_v2";
+  const LS_KEY  = "yt_multi_live_items_v2";
+  // 互換のため残しても良いが、このUIでは使わない
   const LS_MAIN = "yt_multi_live_main_idx_v2";
 
   function parseToEmbedUrl(text){
@@ -213,13 +181,6 @@
   function saveItems(items){
     localStorage.setItem(LS_KEY, JSON.stringify(items));
   }
-  function loadMainIdx(){
-    const n = Number(localStorage.getItem(LS_MAIN) || "0");
-    return Number.isFinite(n) ? n : 0;
-  }
-  function saveMainIdx(i){
-    localStorage.setItem(LS_MAIN, String(i));
-  }
 
   function makeIframe(src){
     const iframe = document.createElement("iframe");
@@ -237,42 +198,12 @@
 
   function render(){
     const items = loadItems();
-    let mainIdx = loadMainIdx();
-    if (mainIdx < 0) mainIdx = 0;
-    if (mainIdx >= items.length) mainIdx = 0;
-
-    // Main
-    const mainTitle = document.getElementById("mainTitle");
-    const mainPlayer = document.getElementById("mainPlayer");
-    const openMain = document.getElementById("openMain");
-
-    mainPlayer.innerHTML = "";
-
-    if (items.length === 0){
-      mainTitle.textContent = "メイン（まだ何もありません）";
-      openMain.onclick = () => {};
-    } else {
-      const main = items[mainIdx];
-      mainTitle.textContent = main.label || main.raw;
-      openMain.onclick = () => window.open(main.openUrl, "_blank", "noopener,noreferrer");
-
-      const src = setMuteOnEmbedUrl(main.embedUrl, !!main.mute);
-      mainPlayer.appendChild(makeIframe(src));
-    }
-
-    // Thumbs
     const thumbs = document.getElementById("thumbs");
     thumbs.innerHTML = "";
 
     items.forEach((item, idx) => {
       const card = document.createElement("div");
-      card.className = "thumb" + (idx === mainIdx ? " selected" : "");
-      card.onclick = (e) => {
-        // ボタン操作時は切替しない
-        if (e.target && (e.target.tagName === "BUTTON")) return;
-        saveMainIdx(idx);
-        render();
-      };
+      card.className = "thumb";
 
       const head = document.createElement("div");
       head.className = "thumbHead";
@@ -284,9 +215,18 @@
       const actions = document.createElement("div");
       actions.className = "thumbActions";
 
+      const openBtn = document.createElement("button");
+      openBtn.textContent = "YouTubeで開く";
+      openBtn.onclick = (e) => {
+        e.stopPropagation();
+        window.open(item.openUrl, "_blank", "noopener,noreferrer");
+      };
+
+      // このUIでは「埋め込みは常にミュート固定」なので、muteは"記録用トグル"として残す
+      // （将来メイン復活や挙動変更したくなった時に互換性が効く）
       const muteBtn = document.createElement("button");
       muteBtn.textContent = item.mute ? "🔇" : "🔊";
-      muteBtn.title = item.mute ? "ミュート解除" : "ミュート";
+      muteBtn.title = item.mute ? "（記録上）ミュート解除" : "（記録上）ミュート";
       muteBtn.onclick = (e) => {
         e.stopPropagation();
         const items2 = loadItems();
@@ -303,18 +243,15 @@
         const items2 = loadItems();
         items2.splice(idx, 1);
         saveItems(items2);
-        const mi = loadMainIdx();
-        if (idx === mi) saveMainIdx(0);
-        else if (idx < mi) saveMainIdx(Math.max(0, mi - 1));
         render();
       };
 
-      actions.append(muteBtn, delBtn);
+      actions.append(openBtn, muteBtn, delBtn);
       head.append(meta, actions);
 
       const mini = document.createElement("div");
       mini.className = "miniPlayer";
-      // サムネ側は原則ミュートで固定（iOS対策：音が鳴りまくるのを防ぐ）
+      // iOS対策：埋め込みは常にミュート固定
       const thumbSrc = setMuteOnEmbedUrl(item.embedUrl, true);
       mini.appendChild(makeIframe(thumbSrc));
 
@@ -322,6 +259,8 @@
       thumbs.appendChild(card);
     });
   }
+
+  // ===== 操作 =====
 
   document.getElementById("add").onclick = () => {
     const raw = document.getElementById("input").value.trim();
@@ -346,16 +285,14 @@
     });
     saveItems(items);
 
-    // 最初の追加ならメインに
-    if (items.length === 1) saveMainIdx(0);
-
     document.getElementById("input").value = "";
     render();
   };
 
   document.getElementById("clear").onclick = () => {
     localStorage.removeItem(LS_KEY);
-    localStorage.removeItem(LS_MAIN);
+    // メインは廃止だが、過去互換のため残ってても害はない
+    // localStorage.removeItem(LS_MAIN);
     render();
   };
 
@@ -363,11 +300,7 @@
     document.documentElement.style.setProperty("--thumb-min", `${e.target.value}px`);
   };
 
-  document.getElementById("mainUnmute").onclick = () => {
-    const items = loadItems();
-    const mainIdx = loadMainIdx();
-    items.forEach((it, idx) => { it.mute = idx !== mainIdx; });
-    saveItems(items);
+  document.getElementById("reloadEmbeds").onclick = () => {
     render();
   };
 
@@ -378,117 +311,99 @@
     render();
   };
 
-  document.getElementById("reloadEmbeds").onclick = () => {
-    // iOSや回線状況で埋め込みが固まった時の手動リロード用
-    render();
-  };
-
   // 初期
   render();
-  
-  // ===== JSON Export / Import =====
 
-function pad2(n){ return String(n).padStart(2, "0"); }
-function formatTimestampLocal(){
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-  const hh = pad2(d.getHours());
-  const mi = pad2(d.getMinutes());
-  const ss = pad2(d.getSeconds());
-  // ファイル名に使える形
-  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
-}
+  // ===== JSON Export / Import（日時付きファイル名 + 共有優先） =====
 
-document.getElementById("exportJson").onclick = async () => {
-  const data = {
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    items: loadItems(),
-    mainIdx: loadMainIdx()
-  };
-
-  const jsonText = JSON.stringify(data, null, 2);
-  const ts = formatTimestampLocal();
-  const filename = `yt-multi-live_${ts}.json`;
-  const blob = new Blob([jsonText], { type: "application/json" });
-
-  // まずは「共有」で確実に保存できるルート（iPad/iPhoneで強い）
-  try {
-    if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] })) {
-      const file = new File([blob], filename, { type: blob.type });
-      await navigator.share({ files: [file], title: filename, text: "YouTube multi-live config JSON" });
-      return;
-    }
-  } catch (e) {
-    // shareがキャンセル/失敗してもフォールバックへ
+  function pad2(n){ return String(n).padStart(2, "0"); }
+  function formatTimestampLocal(){
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = pad2(d.getMonth() + 1);
+    const dd = pad2(d.getDate());
+    const hh = pad2(d.getHours());
+    const mi = pad2(d.getMinutes());
+    const ss = pad2(d.getSeconds());
+    return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
   }
 
-  // フォールバック：従来のダウンロード
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+  }
 
-  // さらに保険：iOSでダウンロードが見えない場合に備えて、内容を別タブで開けるように
-  // （ユーザーが「共有」→「ファイルに保存」できる）
-  // 必要なら下の2行のコメントを外してください
-  // const w = window.open();
-  // if (w) w.document.write(`<pre>${escapeHtml(jsonText)}</pre>`);
-};
+  document.getElementById("exportJson").onclick = async () => {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      items: loadItems(),
+      // 互換のため残す（サムネのみUIでは使わない）
+      mainIdx: 0
+    };
 
-// もし上の「別タブ表示」保険を使う場合に必要
-function escapeHtml(s){
-  return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
-}
+    const jsonText = JSON.stringify(data, null, 2);
+    const ts = formatTimestampLocal();
+    const filename = `yt-multi-live_${ts}.json`;
+    const blob = new Blob([jsonText], { type: "application/json" });
 
-document.getElementById("importJson").onchange = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = () => {
+    // 共有（iPad/iPhoneで保存先を選べて一番確実）
     try {
-      const data = JSON.parse(reader.result);
-
-      // 最低限の構造チェック
-      if (!Array.isArray(data.items)) {
-        throw new Error("items が配列ではありません");
+      if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] })) {
+        const file = new File([blob], filename, { type: blob.type });
+        await navigator.share({ files: [file], title: filename, text: "YouTube multi-live config JSON" });
+        return;
       }
+    } catch (e) {}
 
-      // 想定フィールドを正規化
-      const items = data.items.map(it => ({
-        raw: it.raw || "",
-        label: it.label || it.raw || "",
-        embedUrl: it.embedUrl,
-        openUrl: it.openUrl || it.raw,
-        mute: !!it.mute
-      })).filter(it => it.embedUrl);
+    // フォールバック：ダウンロード
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 
-      const mainIdx =
-        Number.isInteger(data.mainIdx) && data.mainIdx >= 0
-          ? Math.min(data.mainIdx, items.length - 1)
-          : 0;
-
-      saveItems(items);
-      saveMainIdx(mainIdx);
-      render();
-
-      alert("JSONをインポートしました");
-    } catch (err) {
-      alert("JSONの読み込みに失敗しました:\n" + err.message);
-    } finally {
-      e.target.value = ""; // 同じファイルを再選択できるように
-    }
+    // 最終保険（必要なら有効化）：新規タブでJSON表示→共有で保存
+    // const w = window.open();
+    // if (w) w.document.write(`<pre>${escapeHtml(jsonText)}</pre>`);
   };
 
-  reader.readAsText(file);
-};
+  document.getElementById("importJson").onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+
+        if (!Array.isArray(data.items)) {
+          throw new Error("items が配列ではありません");
+        }
+
+        const items = data.items.map(it => ({
+          raw: it.raw || "",
+          label: it.label || it.raw || "",
+          embedUrl: it.embedUrl,
+          openUrl: it.openUrl || it.raw,
+          mute: !!it.mute
+        })).filter(it => it.embedUrl);
+
+        saveItems(items);
+        render();
+
+        alert("JSONをインポートしました");
+      } catch (err) {
+        alert("JSONの読み込みに失敗しました:\n" + err.message);
+      } finally {
+        e.target.value = "";
+      }
+    };
+
+    reader.readAsText(file);
+  };
 </script>
 </body>
 </html>
