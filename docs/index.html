@@ -3,201 +3,330 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Multi YouTube Live Viewer</title>
+  <title>Multi YouTube Live Viewer (Main + Thumbs)</title>
   <style>
-    :root { --gap: 10px; --tile-min: 360px; }
-    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:#111; color:#eee; }
-    header { position: sticky; top: 0; background: #161616; border-bottom: 1px solid #2a2a2a; padding: 10px; z-index: 10; }
-    .row { display:flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    input, button, select {
-      background:#0f0f0f; color:#eee; border:1px solid #333; border-radius: 8px; padding: 10px;
+    :root{
+      --gap: 10px;
+      --thumb-min: 220px;
+      --bg: #111;
+      --panel: #0b0b0b;
+      --border: #222;
+      --text: #eee;
+      --muted: #aaa;
     }
-    input { min-width: min(560px, 92vw); }
-    button { cursor:pointer; }
-    button:hover { border-color:#555; }
-    main { padding: 10px; }
-    .grid {
+    body{ margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+    header{
+      position: sticky; top:0; z-index:10;
+      background:#161616; border-bottom:1px solid #2a2a2a;
+      padding:10px;
+    }
+    .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    input, button, select{
+      background:#0f0f0f; color:var(--text);
+      border:1px solid #333; border-radius:10px;
+      padding:10px;
+    }
+    input{ min-width:min(560px, 92vw); }
+    button{ cursor:pointer; }
+    button:hover{ border-color:#555; }
+    .hint{ font-size:12px; color:var(--muted); margin-top:6px; line-height:1.5; }
+
+    main{ padding:10px; }
+    .layout{
       display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(var(--tile-min), 1fr));
+      grid-template-columns: 1.2fr 0.8fr;
+      grid-template-rows: auto;
       gap: var(--gap);
+      align-items: start;
     }
-    .tile { background:#0b0b0b; border:1px solid #222; border-radius: 12px; overflow:hidden; }
-    .tile header {
-      position: static; background: transparent; border: 0; padding: 8px 10px; display:flex; gap: 8px; align-items:center; justify-content: space-between;
+    /* iPhone縦だとメインを上、サムネを下 */
+    @media (max-width: 900px){
+      .layout{ grid-template-columns: 1fr; }
     }
-    .tile .meta { font-size: 12px; color:#bbb; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 70%; }
-    .tile .actions { display:flex; gap: 6px; }
-    .player {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 16 / 9;
+
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:12px;
+      overflow:hidden;
+    }
+
+    .panelHead{
+      padding:8px 10px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      border-bottom:1px solid var(--border);
+    }
+    .title{
+      font-size:12px; color:#bbb; overflow:hidden;
+      text-overflow:ellipsis; white-space:nowrap; max-width: 70%;
+    }
+    .actions{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+
+    .player{
+      position:relative;
+      width:100%;
+      aspect-ratio:16/9;
       background:#000;
     }
-    iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
-    .hint { font-size: 12px; color:#aaa; margin-top: 6px; line-height: 1.5; }
+    iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; }
+
+    .thumbs{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(var(--thumb-min), 1fr));
+      gap: var(--gap);
+      padding:10px;
+    }
+    .thumb{
+      border:1px solid var(--border);
+      border-radius:12px;
+      overflow:hidden;
+      background:#070707;
+      cursor:pointer;
+      transition: transform .05s ease-in-out;
+    }
+    .thumb:active{ transform: scale(0.99); }
+    .thumb.selected{ outline: 2px solid #6aa6ff; }
+
+    .thumbHead{
+      padding:8px 10px;
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
+      border-bottom:1px solid var(--border);
+    }
+    .thumbMeta{
+      font-size:12px; color:#bbb;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      max-width: 70%;
+    }
+    .thumbActions{ display:flex; gap:6px; }
+    .miniPlayer{
+      position:relative;
+      width:100%;
+      aspect-ratio:16/9;
+      background:#000;
+    }
+
+    .danger{ border-color:#5a2a2a; }
   </style>
 </head>
 <body>
-  <header>
-    <div class="row">
-      <input id="input" placeholder="チャンネルID(UC...) / チャンネルURL / ライブ動画URL を貼って追加" />
-      <button id="add">追加</button>
-      <button id="clear">全部削除</button>
+<header>
+  <div class="row">
+    <input id="input" placeholder="チャンネルID(UC...) / チャンネルURL / ライブ動画URL を貼って追加" />
+    <button id="add">追加</button>
+    <button id="clear" class="danger">全部削除</button>
 
-      <label style="display:flex;gap:6px;align-items:center;">
-        列最小幅
-        <select id="tileMin">
-          <option value="300">300</option>
-          <option value="360" selected>360</option>
-          <option value="420">420</option>
-          <option value="520">520</option>
-        </select>
-      </label>
-    </div>
-    <div class="hint">
-      使い方：複数貼って「追加」→ タイル表示。音が邪魔なら各タイルの「ミュート」推奨。<br/>
-      注意：ブラウザの自動再生制限により、最初は停止/ミュートになることがあります。
-    </div>
-  </header>
+    <label style="display:flex;gap:6px;align-items:center;">
+      サムネ最小幅
+      <select id="thumbMin">
+        <option value="180">180</option>
+        <option value="220" selected>220</option>
+        <option value="280">280</option>
+        <option value="360">360</option>
+      </select>
+    </label>
+  </div>
+  <div class="hint">
+    タップでメイン切替。iPhoneは同時再生/自動再生が制限されることがあります。まずは「メインだけミュート解除」が安定です。
+  </div>
+</header>
 
-  <main>
-    <div id="grid" class="grid"></div>
-  </main>
+<main>
+  <div class="layout">
+    <!-- Main -->
+    <section class="panel" id="mainPanel">
+      <div class="panelHead">
+        <div class="title" id="mainTitle">メイン</div>
+        <div class="actions">
+          <button id="mainUnmute">メインだけミュート解除</button>
+          <button id="allMute">全部ミュート</button>
+          <button id="openMain">YouTubeで開く</button>
+        </div>
+      </div>
+      <div class="player" id="mainPlayer"></div>
+    </section>
+
+    <!-- Thumbs -->
+    <section class="panel">
+      <div class="panelHead">
+        <div class="title">サムネ一覧（タップでメインへ）</div>
+        <div class="actions">
+          <button id="reloadEmbeds">再読み込み</button>
+        </div>
+      </div>
+      <div class="thumbs" id="thumbs"></div>
+    </section>
+  </div>
+</main>
 
 <script>
-  const LS_KEY = "yt_multi_live_items_v1";
+  const LS_KEY = "yt_multi_live_items_v2";
+  const LS_MAIN = "yt_multi_live_main_idx_v2";
 
-  // 1) 入力から「ライブ埋め込みURL」を作る
-  function parseToEmbedUrl(text) {
+  function parseToEmbedUrl(text){
     const s = (text || "").trim();
     if (!s) return null;
 
-    // チャンネルID（UC...）っぽい
     if (/^UC[a-zA-Z0-9_-]{10,}$/.test(s)) {
       return `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(s)}&autoplay=0&mute=1`;
     }
 
-    // URLの場合
-    try {
+    try{
       const u = new URL(s);
 
-      // youtu.be/<id>
-      if (u.hostname === "youtu.be") {
+      if (u.hostname === "youtu.be"){
         const id = u.pathname.replace("/", "");
         if (id) return `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=0&mute=1`;
       }
 
-      // youtube.com/watch?v=<id>
-      if (u.searchParams.get("v")) {
+      if (u.searchParams.get("v")){
         const id = u.searchParams.get("v");
         return `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=0&mute=1`;
       }
 
-      // youtube.com/live/<id>
       const liveMatch = u.pathname.match(/^\/live\/([a-zA-Z0-9_-]+)/);
-      if (liveMatch) {
+      if (liveMatch){
         const id = liveMatch[1];
         return `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=0&mute=1`;
       }
 
-      // youtube.com/@handle や /channel/<id> など
       const chMatch = u.pathname.match(/^\/channel\/(UC[a-zA-Z0-9_-]+)/);
-      if (chMatch) {
+      if (chMatch){
         const cid = chMatch[1];
         return `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(cid)}&autoplay=0&mute=1`;
       }
 
-      // それ以外はそのまま扱えない（ハンドルからチャンネルID解決はAPIが要る）
       return null;
-    } catch {
-      // URLでもIDでもない
+    }catch{
       return null;
     }
   }
 
-  function loadItems() {
-    try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }
-    catch { return []; }
+  function loadItems(){
+    try{ return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }catch{ return []; }
   }
-  function saveItems(items) {
+  function saveItems(items){
     localStorage.setItem(LS_KEY, JSON.stringify(items));
   }
+  function loadMainIdx(){
+    const n = Number(localStorage.getItem(LS_MAIN) || "0");
+    return Number.isFinite(n) ? n : 0;
+  }
+  function saveMainIdx(i){
+    localStorage.setItem(LS_MAIN, String(i));
+  }
 
-  function render() {
-    const grid = document.getElementById("grid");
+  function makeIframe(src){
+    const iframe = document.createElement("iframe");
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    iframe.allowFullscreen = true;
+    iframe.src = src;
+    return iframe;
+  }
+
+  function setMuteOnEmbedUrl(embedUrl, mute){
+    const u = new URL(embedUrl);
+    u.searchParams.set("mute", mute ? "1" : "0");
+    return u.toString();
+  }
+
+  function render(){
     const items = loadItems();
-    grid.innerHTML = "";
+    let mainIdx = loadMainIdx();
+    if (mainIdx < 0) mainIdx = 0;
+    if (mainIdx >= items.length) mainIdx = 0;
+
+    // Main
+    const mainTitle = document.getElementById("mainTitle");
+    const mainPlayer = document.getElementById("mainPlayer");
+    const openMain = document.getElementById("openMain");
+
+    mainPlayer.innerHTML = "";
+
+    if (items.length === 0){
+      mainTitle.textContent = "メイン（まだ何もありません）";
+      openMain.onclick = () => {};
+    } else {
+      const main = items[mainIdx];
+      mainTitle.textContent = main.label || main.raw;
+      openMain.onclick = () => window.open(main.openUrl, "_blank", "noopener,noreferrer");
+
+      const src = setMuteOnEmbedUrl(main.embedUrl, !!main.mute);
+      mainPlayer.appendChild(makeIframe(src));
+    }
+
+    // Thumbs
+    const thumbs = document.getElementById("thumbs");
+    thumbs.innerHTML = "";
 
     items.forEach((item, idx) => {
-      const tile = document.createElement("div");
-      tile.className = "tile";
+      const card = document.createElement("div");
+      card.className = "thumb" + (idx === mainIdx ? " selected" : "");
+      card.onclick = (e) => {
+        // ボタン操作時は切替しない
+        if (e.target && (e.target.tagName === "BUTTON")) return;
+        saveMainIdx(idx);
+        render();
+      };
 
-      const h = document.createElement("header");
+      const head = document.createElement("div");
+      head.className = "thumbHead";
+
       const meta = document.createElement("div");
-      meta.className = "meta";
+      meta.className = "thumbMeta";
       meta.textContent = item.label || item.raw;
 
       const actions = document.createElement("div");
-      actions.className = "actions";
+      actions.className = "thumbActions";
 
       const muteBtn = document.createElement("button");
-      muteBtn.textContent = item.mute ? "ミュート解除" : "ミュート";
-      muteBtn.onclick = () => {
-        item.mute = !item.mute;
-        // iframeのURLを更新して反映
+      muteBtn.textContent = item.mute ? "🔇" : "🔊";
+      muteBtn.title = item.mute ? "ミュート解除" : "ミュート";
+      muteBtn.onclick = (e) => {
+        e.stopPropagation();
         const items2 = loadItems();
-        items2[idx].mute = item.mute;
+        items2[idx].mute = !items2[idx].mute;
         saveItems(items2);
         render();
       };
 
-      const openBtn = document.createElement("button");
-      openBtn.textContent = "YouTubeで開く";
-      openBtn.onclick = () => window.open(item.openUrl, "_blank", "noopener,noreferrer");
-
       const delBtn = document.createElement("button");
-      delBtn.textContent = "削除";
-      delBtn.onclick = () => {
+      delBtn.textContent = "✕";
+      delBtn.title = "削除";
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
         const items2 = loadItems();
         items2.splice(idx, 1);
         saveItems(items2);
+        const mi = loadMainIdx();
+        if (idx === mi) saveMainIdx(0);
+        else if (idx < mi) saveMainIdx(Math.max(0, mi - 1));
         render();
       };
 
-      actions.append(muteBtn, openBtn, delBtn);
-      h.append(meta, actions);
+      actions.append(muteBtn, delBtn);
+      head.append(meta, actions);
 
-      const player = document.createElement("div");
-      player.className = "player";
+      const mini = document.createElement("div");
+      mini.className = "miniPlayer";
+      // サムネ側は原則ミュートで固定（iOS対策：音が鳴りまくるのを防ぐ）
+      const thumbSrc = setMuteOnEmbedUrl(item.embedUrl, true);
+      mini.appendChild(makeIframe(thumbSrc));
 
-      const iframe = document.createElement("iframe");
-      iframe.allow =
-        "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
-      iframe.allowFullscreen = true;
-
-      // muteは埋め込みURLのクエリで付け替え（簡易版）
-      const url = new URL(item.embedUrl);
-      url.searchParams.set("mute", item.mute ? "1" : "0");
-      iframe.src = url.toString();
-
-      player.appendChild(iframe);
-
-      tile.append(h, player);
-      grid.appendChild(tile);
+      card.append(head, mini);
+      thumbs.appendChild(card);
     });
   }
 
   document.getElementById("add").onclick = () => {
     const raw = document.getElementById("input").value.trim();
     const embedUrl = parseToEmbedUrl(raw);
-    if (!embedUrl) {
+    if (!embedUrl){
       alert("解釈できませんでした。チャンネルID(UC...)か、ライブ/動画URLを貼ってください。");
       return;
     }
 
-    // YouTubeで開く用URL（動画IDなら watch、チャンネルIDなら channel）
     let openUrl = raw;
-    if (/^UC[a-zA-Z0-9_-]{10,}$/.test(raw)) {
+    if (/^UC[a-zA-Z0-9_-]{10,}$/.test(raw)){
       openUrl = `https://www.youtube.com/channel/${raw}/live`;
     }
 
@@ -207,9 +336,12 @@
       label: raw,
       embedUrl,
       openUrl,
-      mute: true,
+      mute: true
     });
     saveItems(items);
+
+    // 最初の追加ならメインに
+    if (items.length === 1) saveMainIdx(0);
 
     document.getElementById("input").value = "";
     render();
@@ -217,11 +349,32 @@
 
   document.getElementById("clear").onclick = () => {
     localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(LS_MAIN);
     render();
   };
 
-  document.getElementById("tileMin").onchange = (e) => {
-    document.documentElement.style.setProperty("--tile-min", `${e.target.value}px`);
+  document.getElementById("thumbMin").onchange = (e) => {
+    document.documentElement.style.setProperty("--thumb-min", `${e.target.value}px`);
+  };
+
+  document.getElementById("mainUnmute").onclick = () => {
+    const items = loadItems();
+    const mainIdx = loadMainIdx();
+    items.forEach((it, idx) => { it.mute = idx !== mainIdx; });
+    saveItems(items);
+    render();
+  };
+
+  document.getElementById("allMute").onclick = () => {
+    const items = loadItems();
+    items.forEach(it => it.mute = true);
+    saveItems(items);
+    render();
+  };
+
+  document.getElementById("reloadEmbeds").onclick = () => {
+    // iOSや回線状況で埋め込みが固まった時の手動リロード用
+    render();
   };
 
   // 初期
