@@ -388,7 +388,20 @@
   
   // ===== JSON Export / Import =====
 
-document.getElementById("exportJson").onclick = () => {
+function pad2(n){ return String(n).padStart(2, "0"); }
+function formatTimestampLocal(){
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mi = pad2(d.getMinutes());
+  const ss = pad2(d.getSeconds());
+  // ファイル名に使える形
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+}
+
+document.getElementById("exportJson").onclick = async () => {
   const data = {
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -396,20 +409,43 @@ document.getElementById("exportJson").onclick = () => {
     mainIdx: loadMainIdx()
   };
 
-  const blob = new Blob(
-    [JSON.stringify(data, null, 2)],
-    { type: "application/json" }
-  );
+  const jsonText = JSON.stringify(data, null, 2);
+  const ts = formatTimestampLocal();
+  const filename = `yt-multi-live_${ts}.json`;
+  const blob = new Blob([jsonText], { type: "application/json" });
 
+  // まずは「共有」で確実に保存できるルート（iPad/iPhoneで強い）
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] })) {
+      const file = new File([blob], filename, { type: blob.type });
+      await navigator.share({ files: [file], title: filename, text: "YouTube multi-live config JSON" });
+      return;
+    }
+  } catch (e) {
+    // shareがキャンセル/失敗してもフォールバックへ
+  }
+
+  // フォールバック：従来のダウンロード
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "yt-multi-live.json";
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+
+  // さらに保険：iOSでダウンロードが見えない場合に備えて、内容を別タブで開けるように
+  // （ユーザーが「共有」→「ファイルに保存」できる）
+  // 必要なら下の2行のコメントを外してください
+  // const w = window.open();
+  // if (w) w.document.write(`<pre>${escapeHtml(jsonText)}</pre>`);
 };
+
+// もし上の「別タブ表示」保険を使う場合に必要
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+}
 
 document.getElementById("importJson").onchange = (e) => {
   const file = e.target.files[0];
