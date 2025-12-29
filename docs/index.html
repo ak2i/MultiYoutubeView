@@ -124,7 +124,13 @@
         <option value="360">360</option>
       </select>
     </label>
-  </div>
+    <button id="exportJson">JSONエクスポート</button>
+
+      <label style="display:flex;align-items:center;gap:6px;">
+        JSONインポート
+        <input id="importJson" type="file" accept="application/json" style="display:none;">
+      </label>
+    </div>
   <div class="hint">
     タップでメイン切替。iPhoneは同時再生/自動再生が制限されることがあります。まずは「メインだけミュート解除」が安定です。
   </div>
