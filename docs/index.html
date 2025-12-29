@@ -379,6 +379,74 @@
 
   // 初期
   render();
+  
+  // ===== JSON Export / Import =====
+
+document.getElementById("exportJson").onclick = () => {
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    items: loadItems(),
+    mainIdx: loadMainIdx()
+  };
+
+  const blob = new Blob(
+    [JSON.stringify(data, null, 2)],
+    { type: "application/json" }
+  );
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "yt-multi-live.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+document.getElementById("importJson").onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+
+      // 最低限の構造チェック
+      if (!Array.isArray(data.items)) {
+        throw new Error("items が配列ではありません");
+      }
+
+      // 想定フィールドを正規化
+      const items = data.items.map(it => ({
+        raw: it.raw || "",
+        label: it.label || it.raw || "",
+        embedUrl: it.embedUrl,
+        openUrl: it.openUrl || it.raw,
+        mute: !!it.mute
+      })).filter(it => it.embedUrl);
+
+      const mainIdx =
+        Number.isInteger(data.mainIdx) && data.mainIdx >= 0
+          ? Math.min(data.mainIdx, items.length - 1)
+          : 0;
+
+      saveItems(items);
+      saveMainIdx(mainIdx);
+      render();
+
+      alert("JSONをインポートしました");
+    } catch (err) {
+      alert("JSONの読み込みに失敗しました:\n" + err.message);
+    } finally {
+      e.target.value = ""; // 同じファイルを再選択できるように
+    }
+  };
+
+  reader.readAsText(file);
+};
 </script>
 </body>
 </html>
